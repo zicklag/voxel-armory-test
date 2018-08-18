@@ -212,18 +212,19 @@ class GameMain extends iron.Trait {
 		});
 
 		// Create array of voxels
-		var voxels = [
-			{x:0, y:0, z:0, color: {r:256,g:0,b:256,a:256}},
-			{x:0, y:1, z:0, color: {r:256,g:0,b:256,a:256}},
-			{x:0, y:3, z:0, color: {r:256,g:0,b:256,a:256}},
-			{x:-1, y:2, z:0, color: {r:256,g:0,b:256,a:256}},
-			{x:1, y:2, z:0, color: {r:256,g:0,b:256,a:256}},
-			{x:-3, y:2, z:2, color: {r:256,g:0,b:256,a:256}},
-			{x:-3, y:2, z:1, color: {r:256,g:0,b:256,a:256}},
-			{x:3, y:2, z:1, color: {r:256,g:0,b:256,a:256}},
-		];
+		var chunkSize = new Vec4(20,10,20);
+		var voxels = [];
+		for (x in Math.floor(-chunkSize.x/2)...Math.ceil(chunkSize.x/2)) {
+			for (y in Math.floor(-chunkSize.y/2)...Math.ceil(chunkSize.y/2)) {
+				for (z in Math.floor(-chunkSize.z/2)...Math.ceil(chunkSize.z/2)) {
+					if (z < -4) {
+						voxels.push({x:x, y:y, z:z, color: {r:256,g:0,b:256,a:256}});
+					}
+				}
+			}	
+		}
 
-		this.chunk1 = new VoxelChunk(new Vec4(0, 7, 0), new Vec4(7,7,7), cast voxels);
+		this.chunk1 = new VoxelChunk(new Vec4(0, 0, 4), chunkSize, cast voxels);
 		chunk1.generateVoxelMesh();
 		notifyOnInit(init);
 	}
