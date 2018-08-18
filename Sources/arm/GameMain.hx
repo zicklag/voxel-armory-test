@@ -23,15 +23,23 @@ import kha.input.Mouse;
 import kha.input.Keyboard;
 import kha.input.KeyCode;
 
-using GameMain.VoxelExtensions;
 
-class VoxelExtensions {
-	static public function getTransform(voxel:Voxel):Transform {
-		if (voxel == null) {return null;}
-		var t = new Transform(null);
-		t.loc = new Vec4(voxel.x, voxel.y, voxel.z);
-		t.dim = new Vec4(1, 1, 1);
-		return t;
+
+class VoxelWorld {
+	public var worldName:String;
+	public var chunks:Array<VoxelChunk> = new Array();
+
+	/**
+		@param worldName The name of the world used to save and load world data
+		@param chunkSize The diameter of a chunk measured in voxels
+		@param worldDiameter The world diameter meansured in chunks
+	**/
+	public function new(worldName:String, chunkSize:Int, worldDiameter:Vec4) {
+
+	}
+
+	public function generateLandscape() {
+		
 	}
 }
 
@@ -44,17 +52,56 @@ class VoxelChunk {
 
 	public function new(center:Vec4, chunkSize:Vec4, voxels:Array<Voxel> = null) {
 		this.transform = new Transform(null);
-		transform.loc = center != null ? center : new Vec4();
-		transform.dim = chunkSize != null ? chunkSize : new Vec4();
+		transform.loc = center != null ? center : new Vec4(0, 0, 0);
+		transform.dim = chunkSize != null ? chunkSize : new Vec4(7, 7, 7);
 		this.voxels = voxels != null ? voxels : new Array<Voxel>();
+	}
+
+	private function getVoxelTransform(voxel:Voxel) {
+		if (voxel == null) {return null;}
+		var t = new Transform(null);
+		t.loc = new Vec4(
+			voxel.x + this.transform.loc.x,
+			voxel.y + this.transform.loc.y,
+			voxel.z + this.transform.loc.z
+		);
+		t.dim = new Vec4(1, 1, 1);
+		return t;
+	}
+
+	private function newVoxelAtLocation(loc:Vec4):Voxel {
+		if (transform == null) {return null;}
+		return cast {
+			x: Math.round(loc.x) - this.transform.loc.x,
+			y: Math.round(loc.y) - this.transform.loc.y,
+			z: Math.round(loc.z) - this.transform.loc.z,
+			color: {r:256,g:0,b:256,a:256}
+		}
+	}
+
+	private function voxelOutOfBounds(voxel:Voxel):Bool {
+		if (Math.abs(voxel.x) > this.transform.dim.x/2 ||
+			Math.abs(voxel.y) > this.transform.dim.y/2 ||
+			Math.abs(voxel.z) > this.transform.dim.z/2) {
+				return true;
+		} else {
+			return false;
+		}
 	}
 
 	public function generateVoxelMesh(done:Void->Void = null) {
 		// Re-generate Voxel Mesh
-		var voxelMesh:Array<Triangle> = VoxelTools.newVoxelMesh(this.voxels);
+		var voxelMesh:Array<Triangle> = null;
+		voxelMesh = VoxelTools.newVoxelMesh(this.voxels);
 
 		// Generate new Iron Mesh Data
-		var ironMesh:TMeshData = MeshFactory.createRawIronMeshData(voxelMesh, "KexIronMesh", 0, 0, 0);
+		var ironMesh:TMeshData = MeshFactory.createRawIronMeshData(
+			voxelMesh,
+			"KexIronMesh",
+			0,
+			0,
+			0
+		);
 
 		// Remove existing voxel mesh
 		if (this.meshObject != null) {
@@ -89,38 +136,32 @@ class VoxelChunk {
 		meshObject.transform.dim.setFrom(this.transform.dim);
 	}
 
-	public function breakBlockUnderMouse(x:Int, y:Int):Bool {
+	public function breakBlockUnderMouse(x:Int, y:Int) {
 		var clickedVoxel = getVoxelUnderMouse(x,y);
-		if (clickedVoxel == null) {return false;}
+		if (clickedVoxel == null) {return;}
 		this.voxels.remove(clickedVoxel);
 
 		generateVoxelMesh();
 		spawnVoxelMesh();
-
-		return true;
 	}
 
-	public function placeBlockUnderMouse(x:Int, y:Int):Bool {
+	public function placeBlockUnderMouse(x:Int, y:Int) {
 		var clickRay = RayCaster.getRay(x, y, Scene.active.camera);
 		var clickedVoxel = getVoxelUnderMouse(x,y);
-		if (clickedVoxel == null) {return false;}
-		var t = clickedVoxel.getTransform();
+		if (clickedVoxel == null) {return;}
+		var t = getVoxelTransform(clickedVoxel);
 		var clickLoc = clickRay.intersectBox(t.loc, t.dim);
 
 		var placementRay = new Ray(clickLoc, Scene.active.camera.transform.loc);
 		var placementPos = placementRay.at(0.01);
-		var newVoxel = {
-			x: Math.round(placementPos.x),
-			y: Math.round(placementPos.y),
-			z: Math.round(placementPos.z),
-			color: {r:256,g:0,b:256,a:256}
+		
+		var newVoxel = newVoxelAtLocation(placementPos);
+
+		if (!voxelOutOfBounds(newVoxel)) {
+			this.voxels.push(newVoxel);
+			generateVoxelMesh();
+			spawnVoxelMesh();
 		}
-
-		this.voxels.push(cast newVoxel);
-		generateVoxelMesh();
-		spawnVoxelMesh();
-
-		return true;
 	}
 
 	public function getVoxelUnderMouse(mouseX:Int, mouseY:Int) {
@@ -130,7 +171,7 @@ class VoxelChunk {
 		// Get blocks under mouse click
 		var intersections = [];
 		for (voxel in this.voxels) {
-			var t = voxel.getTransform();
+			var t = getVoxelTransform(voxel);
 			if (clickRay.intersectsBox(t.loc, t.dim)) {
 				intersections.push(voxel);
 			}
@@ -140,7 +181,7 @@ class VoxelChunk {
 		if (intersections.length != 0) {
 			var minDist:Float = std.Math.POSITIVE_INFINITY;
 			for (voxel in intersections) {
-				var dist = Vec4.distance(voxel.getTransform().loc, Scene.active.camera.transform.loc);
+				var dist = Vec4.distance(getVoxelTransform(voxel).loc, Scene.active.camera.transform.loc);
 				if (dist < minDist) {
 					minDist = dist;
 					closest = voxel;
@@ -182,10 +223,9 @@ class GameMain extends iron.Trait {
 			{x:3, y:2, z:1, color: {r:256,g:0,b:256,a:256}},
 		];
 
-		this.chunk1 = new VoxelChunk(new Vec4(0, 0, 0), new Vec4(7,7,7), cast voxels);
-		chunk1.generateVoxelMesh(function () {
-			notifyOnInit(init);
-		});
+		this.chunk1 = new VoxelChunk(new Vec4(0, 7, 0), new Vec4(7,7,7), cast voxels);
+		chunk1.generateVoxelMesh();
+		notifyOnInit(init);
 	}
 
 	function init() {
