@@ -35,75 +35,21 @@ class VoxelExtensions {
 	}
 }
 
-class GameMain extends iron.Trait {
+class VoxelChunk {
+	var voxels:Array<Voxel>;
 	var meshData:MeshData;
 	var meshObject:MeshObject;
-	var voxels:Array<Voxel> = new Array();
-	var blockTransforms:Array<Transform>;
+	var transform:Transform;
 	var materials:haxe.ds.Vector<MaterialData>;
- 	
-	public function new() {
-		super();
 
-		// Set mouse event listeners
-		notifyOnInit(function() {
-			Mouse.get().notify(onMouseDown, onMouseUp, onMouseMove, onMouseWheel);
-			Keyboard.get().notify(onKeyDown, onKeyUp);
-		});
-
-		notifyOnRemove(function() {
-			// Trait or its object is removed, remove event listeners
-			Mouse.get().remove(onMouseDown, onMouseUp, onMouseMove, onMouseWheel);
-			Keyboard.get().remove(onKeyDown, onKeyUp, null);
-		});
-
-		// Create array of voxels
-		this.voxels = [
-			{x:0, y:0, z:0, color: {r:256,g:0,b:256,a:256}},
-			{x:0, y:1, z:0, color: {r:256,g:0,b:256,a:256}},
-			{x:0, y:3, z:0, color: {r:256,g:0,b:256,a:256}},
-			{x:-1, y:2, z:0, color: {r:256,g:0,b:256,a:256}},
-			{x:1, y:2, z:0, color: {r:256,g:0,b:256,a:256}},
-			{x:-3, y:2, z:2, color: {r:256,g:0,b:256,a:256}},
-			{x:-3, y:2, z:1, color: {r:256,g:0,b:256,a:256}},
-			{x:3, y:2, z:1, color: {r:256,g:0,b:256,a:256}},
-		];
-
-		generateVoxelMesh();
+	public function new(center:Vec4, chunkSize:Vec4, voxels:Array<Voxel> = null) {
+		this.transform = new Transform(null);
+		transform.loc = center != null ? center : new Vec4();
+		transform.dim = chunkSize != null ? chunkSize : new Vec4();
+		this.voxels = voxels != null ? voxels : new Array<Voxel>();
 	}
 
-	function init() {
-		// Spawn voxel chunk
-		spawnVoxelMesh();
-	}
-
-	function onMouseDown(button: Int, x: Int, y: Int) {
-		if (button == 0) {
-			breakBlockUnderMouse(x, y);
-		} else if (button == 1) {
-			placeBlockUnderMouse(x, y);
-		}
-	}
-
-	function onMouseUp(button: Int, x: Int, y: Int) { }
-	function onMouseMove(x: Int, y: Int, movementX: Int, movementY: Int) { }
-	function onMouseWheel(delta: Int) { }
-
-	function onKeyDown(key:KeyCode) {
-
-		function handleSpacebar() {
-			trace("Spacebar");
-		}
-
-		switch (key) {
-			case Space: handleSpacebar();
-			default:
-		}
-	}
-
-	function onKeyUp(key:KeyCode) {}
-
-	function generateVoxelMesh() {
+	public function generateVoxelMesh(done:Void->Void = null) {
 		// Re-generate Voxel Mesh
 		var voxelMesh:Array<Triangle> = VoxelTools.newVoxelMesh(this.voxels);
 
@@ -127,28 +73,37 @@ class GameMain extends iron.Trait {
 				// Load Material From scene
 				Data.getMaterial("Scene", "DefaultBlockMat", function(data:MaterialData) {
 					this.materials = haxe.ds.Vector.fromData([data]);
-					notifyOnInit(init);
+					if (done != null) {
+						done();
+					}
 				});
 			}
 		});
 	}
 
-	function spawnVoxelMesh() {
+	public function spawnVoxelMesh() {
 		// Re-spawn new voxel mesh
 		this.meshObject = Scene.active.addMeshObject(meshData, materials);
+		meshObject.transform.loc.setFrom(this.transform.loc);
+		meshObject.transform.buildMatrix();
+		meshObject.transform.dim.setFrom(this.transform.dim);
 	}
 
-	function breakBlockUnderMouse(x:Int, y:Int) {
-		this.voxels.remove(getVoxelUnderMouse(x,y));
+	public function breakBlockUnderMouse(x:Int, y:Int):Bool {
+		var clickedVoxel = getVoxelUnderMouse(x,y);
+		if (clickedVoxel == null) {return false;}
+		this.voxels.remove(clickedVoxel);
 
 		generateVoxelMesh();
 		spawnVoxelMesh();
+
+		return true;
 	}
 
-	function placeBlockUnderMouse(x:Int, y:Int) {
+	public function placeBlockUnderMouse(x:Int, y:Int):Bool {
 		var clickRay = RayCaster.getRay(x, y, Scene.active.camera);
 		var clickedVoxel = getVoxelUnderMouse(x,y);
-		if (clickedVoxel == null) {return;}
+		if (clickedVoxel == null) {return false;}
 		var t = clickedVoxel.getTransform();
 		var clickLoc = clickRay.intersectBox(t.loc, t.dim);
 
@@ -164,9 +119,11 @@ class GameMain extends iron.Trait {
 		this.voxels.push(cast newVoxel);
 		generateVoxelMesh();
 		spawnVoxelMesh();
+
+		return true;
 	}
 
-	function getVoxelUnderMouse(mouseX:Int, mouseY:Int) {
+	public function getVoxelUnderMouse(mouseX:Int, mouseY:Int) {
 		var clickRay = RayCaster.getRay(mouseX, mouseY, Scene.active.camera);
 		var closest:Voxel = null;
 
@@ -193,4 +150,72 @@ class GameMain extends iron.Trait {
 
 		return closest;
 	}
+}
+
+class GameMain extends iron.Trait {
+	var chunk1:VoxelChunk;
+ 	
+	public function new() {
+		super();
+
+		// Set mouse event listeners
+		notifyOnInit(function() {
+			Mouse.get().notify(onMouseDown, onMouseUp, onMouseMove, onMouseWheel);
+			Keyboard.get().notify(onKeyDown, onKeyUp);
+		});
+
+		notifyOnRemove(function() {
+			// Trait or its object is removed, remove event listeners
+			Mouse.get().remove(onMouseDown, onMouseUp, onMouseMove, onMouseWheel);
+			Keyboard.get().remove(onKeyDown, onKeyUp, null);
+		});
+
+		// Create array of voxels
+		var voxels = [
+			{x:0, y:0, z:0, color: {r:256,g:0,b:256,a:256}},
+			{x:0, y:1, z:0, color: {r:256,g:0,b:256,a:256}},
+			{x:0, y:3, z:0, color: {r:256,g:0,b:256,a:256}},
+			{x:-1, y:2, z:0, color: {r:256,g:0,b:256,a:256}},
+			{x:1, y:2, z:0, color: {r:256,g:0,b:256,a:256}},
+			{x:-3, y:2, z:2, color: {r:256,g:0,b:256,a:256}},
+			{x:-3, y:2, z:1, color: {r:256,g:0,b:256,a:256}},
+			{x:3, y:2, z:1, color: {r:256,g:0,b:256,a:256}},
+		];
+
+		this.chunk1 = new VoxelChunk(new Vec4(0, 0, 0), new Vec4(7,7,7), cast voxels);
+		chunk1.generateVoxelMesh(function () {
+			notifyOnInit(init);
+		});
+	}
+
+	function init() {
+		// Spawn voxel chunk
+		this.chunk1.spawnVoxelMesh();
+	}
+
+	function onMouseDown(button: Int, x: Int, y: Int) {
+		if (button == 0) {
+			this.chunk1.breakBlockUnderMouse(x, y);
+		} else if (button == 1) {
+			this.chunk1.placeBlockUnderMouse(x, y);
+		}
+	}
+
+	function onMouseUp(button: Int, x: Int, y: Int) { }
+	function onMouseMove(x: Int, y: Int, movementX: Int, movementY: Int) { }
+	function onMouseWheel(delta: Int) { }
+
+	function onKeyDown(key:KeyCode) {
+
+		function handleSpacebar() {
+			trace("Spacebar");
+		}
+
+		switch (key) {
+			case Space: handleSpacebar();
+			default:
+		}
+	}
+
+	function onKeyUp(key:KeyCode) {}
 }
