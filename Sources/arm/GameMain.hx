@@ -15,6 +15,7 @@ import iron.object.MeshObject;
 import iron.system.Input;
 import iron.math.Vec4;
 import iron.math.RayCaster;
+import iron.math.Ray;
 import armory.trait.physics.bullet.PhysicsWorld;
 import armory.trait.physics.bullet.RigidBody;
 
@@ -26,6 +27,7 @@ using GameMain.VoxelExtensions;
 
 class VoxelExtensions {
 	static public function getTransform(voxel:Voxel):Transform {
+		if (voxel == null) {return null;}
 		var t = new Transform(null);
 		t.loc = new Vec4(voxel.x, voxel.y, voxel.z);
 		t.dim = new Vec4(1, 1, 1);
@@ -67,7 +69,7 @@ class GameMain extends iron.Trait {
 			{x:3, y:2, z:1, color: {r:256,g:0,b:256,a:256}},
 		];
 
-		generateVoxelMesh(voxels);
+		generateVoxelMesh();
 	}
 
 	function init() {
@@ -76,21 +78,11 @@ class GameMain extends iron.Trait {
 	}
 
 	function onMouseDown(button: Int, x: Int, y: Int) {
-		var clickRay = RayCaster.getRay(x, y, Scene.active.camera);
-		// var closestTransform = RayCaster.closestBoxIntersect(transforms, x, y, Scene.active.camera);
-
-		// For every voxel check whether or not the ray intersects any of them
-		var newVoxels = [];
-		for (voxel in this.voxels) {
-			var t = voxel.getTransform();
-			if (!clickRay.intersectsBox(t.loc, t.dim)) {
-				newVoxels.push(voxel);
-			}
+		if (button == 0) {
+			breakBlockUnderMouse(x, y);
+		} else if (button == 1) {
+			placeBlockUnderMouse(x, y);
 		}
-
-		this.voxels = newVoxels;
-		generateVoxelMesh(this.voxels);
-		spawnVoxelMesh();
 	}
 
 	function onMouseUp(button: Int, x: Int, y: Int) { }
@@ -111,9 +103,9 @@ class GameMain extends iron.Trait {
 
 	function onKeyUp(key:KeyCode) {}
 
-	function generateVoxelMesh(voxels:Array<Voxel>) {
+	function generateVoxelMesh() {
 		// Re-generate Voxel Mesh
-		var voxelMesh:Array<Triangle> = VoxelTools.newVoxelMesh(voxels);
+		var voxelMesh:Array<Triangle> = VoxelTools.newVoxelMesh(this.voxels);
 
 		// Generate new Iron Mesh Data
 		var ironMesh:TMeshData = MeshFactory.createRawIronMeshData(voxelMesh, "KexIronMesh", 0, 0, 0);
@@ -144,5 +136,61 @@ class GameMain extends iron.Trait {
 	function spawnVoxelMesh() {
 		// Re-spawn new voxel mesh
 		this.meshObject = Scene.active.addMeshObject(meshData, materials);
+	}
+
+	function breakBlockUnderMouse(x:Int, y:Int) {
+		this.voxels.remove(getVoxelUnderMouse(x,y));
+
+		generateVoxelMesh();
+		spawnVoxelMesh();
+	}
+
+	function placeBlockUnderMouse(x:Int, y:Int) {
+		var clickRay = RayCaster.getRay(x, y, Scene.active.camera);
+		var clickedVoxel = getVoxelUnderMouse(x,y);
+		if (clickedVoxel == null) {return;}
+		var t = clickedVoxel.getTransform();
+		var clickLoc = clickRay.intersectBox(t.loc, t.dim);
+
+		var placementRay = new Ray(clickLoc, Scene.active.camera.transform.loc);
+		var placementPos = placementRay.at(0.01);
+		var newVoxel = {
+			x: Math.round(placementPos.x),
+			y: Math.round(placementPos.y),
+			z: Math.round(placementPos.z),
+			color: {r:256,g:0,b:256,a:256}
+		}
+
+		this.voxels.push(cast newVoxel);
+		generateVoxelMesh();
+		spawnVoxelMesh();
+	}
+
+	function getVoxelUnderMouse(mouseX:Int, mouseY:Int) {
+		var clickRay = RayCaster.getRay(mouseX, mouseY, Scene.active.camera);
+		var closest:Voxel = null;
+
+		// Get blocks under mouse click
+		var intersections = [];
+		for (voxel in this.voxels) {
+			var t = voxel.getTransform();
+			if (clickRay.intersectsBox(t.loc, t.dim)) {
+				intersections.push(voxel);
+			}
+		}
+
+		// Get closest block to mouse click
+		if (intersections.length != 0) {
+			var minDist:Float = std.Math.POSITIVE_INFINITY;
+			for (voxel in intersections) {
+				var dist = Vec4.distance(voxel.getTransform().loc, Scene.active.camera.transform.loc);
+				if (dist < minDist) {
+					minDist = dist;
+					closest = voxel;
+				}
+			}
+		}
+
+		return closest;
 	}
 }
