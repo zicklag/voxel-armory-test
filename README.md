@@ -1,6 +1,6 @@
 # voxel-armory-test
 
-A rudimentary test or using Armory3D and voxel triangulation like a sandbox game.
+A rudimentary test or using Armory3D and voxel triangulation like a sandbox game. There is a playble web build [here](https://zicklag.github.io/voxel-armory-test/).
 
 Left click to break blocks, right click to place blocks, click and drag to look around, use W, A, S, D, Q, and E keys to fly around.
 
